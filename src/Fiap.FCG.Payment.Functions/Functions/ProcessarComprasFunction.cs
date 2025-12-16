@@ -85,7 +85,7 @@ namespace Fiap.FCG.Payment.Functions.Functions
                     ct
                 );
 
-                if (!pagamentoResp.Sucesso || pagamentoResp.PagamentoId is null)
+                if (!pagamentoResp.Sucesso || pagamentoResp.Valor  <= 0)
                 {
                     _logger.LogError(
                         "Payment API retornou falha. UsuarioId={UsuarioId}, JogoId={JogoId}, Msg={Msg}",
@@ -101,7 +101,7 @@ namespace Fiap.FCG.Payment.Functions.Functions
 
                 var evt = new PagamentoCriadoEvent
                 {
-                    PagamentoId = pagamentoResp.PagamentoId.Value,
+                    PagamentoId = pagamentoResp.Valor,
                     UsuarioId = compra.UsuarioId,
                     JogoId = item.JogoId,
                     Valor = item.Valor,
