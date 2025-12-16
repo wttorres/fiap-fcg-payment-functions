@@ -1,14 +1,39 @@
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Builder;
+using Fiap.FCG.Payment.Functions.Options;
+using Fiap.FCG.Payment.Functions.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Net.Http.Headers;
 
-var builder = FunctionsApplication.CreateBuilder(args);
+var host = new HostBuilder()
+    .ConfigureAppConfiguration(cfg =>
+    {
+        cfg.AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
+        cfg.AddEnvironmentVariables();
+    })
+    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureServices((context, services) =>
+    {
+        services.Configure<PaymentApiOptions>(context.Configuration.GetSection("PaymentApi"));
+        services.Configure<ServiceBusOptions>(context.Configuration.GetSection("ServiceBus"));
 
-builder.ConfigureFunctionsWebApplication();
+        services.AddHttpClient<IPaymentApiClient, PaymentApiClient>((sp, http) =>
+        {
+            var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PaymentApiOptions>>().Value;
 
-builder.Services
-    .AddApplicationInsightsTelemetryWorkerService()
-    .ConfigureFunctionsApplicationInsights();
+            if (string.IsNullOrWhiteSpace(opt.BaseUrl))
+                throw new InvalidOperationException("PaymentApi:BaseUrl não configurado.");
 
-builder.Build().Run();
+            http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // Se sua API Payments exigir JWT, você pode usar opt.BearerToken aqui.
+            if (!string.IsNullOrWhiteSpace(opt.BearerToken))
+                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", opt.BearerToken);
+        });
+
+        services.AddSingleton<IServiceBusPublisher, ServiceBusPublisher>();
+    })
+    .Build();
+
+host.Run();
