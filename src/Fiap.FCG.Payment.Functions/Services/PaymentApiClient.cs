@@ -13,11 +13,9 @@ namespace Fiap.FCG.Payment.Functions.Services
         }
 
         public async Task<CriarPagamentoResponse> CriarPagamentoAsync(CriarPagamentoRequest request, CancellationToken ct)
-        {
-            // Ajuste a rota para a sua API real
+        {            
             using var resp = await _http.PostAsJsonAsync("api/pagamentos", request, ct);
-
-            // Se sua API retornar 400/500, a function vai falhar e a mensagem volta/retry/DLQ (padrão).
+            
             resp.EnsureSuccessStatusCode();
 
             var result = await resp.Content.ReadFromJsonAsync<CriarPagamentoResponse>(cancellationToken: ct);

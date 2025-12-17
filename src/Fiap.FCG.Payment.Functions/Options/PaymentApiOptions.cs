@@ -3,6 +3,5 @@
     public class PaymentApiOptions
     {
         public string BaseUrl { get; set; } = default!;
-        public string? BearerToken { get; set; }
     }
 }

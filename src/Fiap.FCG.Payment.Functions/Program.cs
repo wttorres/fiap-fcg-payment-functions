@@ -15,7 +15,6 @@ var host = new HostBuilder()
     .ConfigureServices((context, services) =>
     {
         services.Configure<PaymentApiOptions>(context.Configuration.GetSection("PaymentApi"));
-        services.Configure<ServiceBusOptions>(context.Configuration.GetSection("ServiceBus"));
 
         services.AddHttpClient<IPaymentApiClient, PaymentApiClient>((sp, http) =>
         {
@@ -27,8 +26,6 @@ var host = new HostBuilder()
             http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
             http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         });
-
-        services.AddSingleton<IServiceBusPublisher, ServiceBusPublisher>();
     })
     .Build();
 
