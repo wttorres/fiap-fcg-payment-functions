@@ -26,10 +26,6 @@ var host = new HostBuilder()
 
             http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
             http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            // Se sua API Payments exigir JWT, você pode usar opt.BearerToken aqui.
-            if (!string.IsNullOrWhiteSpace(opt.BearerToken))
-                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", opt.BearerToken);
         });
 
         services.AddSingleton<IServiceBusPublisher, ServiceBusPublisher>();
