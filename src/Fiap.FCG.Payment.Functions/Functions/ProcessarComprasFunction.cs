@@ -1,10 +1,8 @@
 ﻿using Fiap.FCG.Payment.Functions.Contracts;
-using Fiap.FCG.Payment.Functions.Options;
 using Fiap.FCG.Payment.Functions.Services;
 using Fiap.FCG.Payment.Functions.Services.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace Fiap.FCG.Payment.Functions.Functions
@@ -13,19 +11,13 @@ namespace Fiap.FCG.Payment.Functions.Functions
     {
         private readonly ILogger<ProcessarComprasFunction> _logger;
         private readonly IPaymentApiClient _paymentApi;
-        private readonly IServiceBusPublisher _publisher;
-        private readonly ServiceBusOptions _sbOptions;
 
         public ProcessarComprasFunction(
             ILogger<ProcessarComprasFunction> logger,
-            IPaymentApiClient paymentApi,
-            IServiceBusPublisher publisher,
-            IOptions<ServiceBusOptions> sbOptions)
+            IPaymentApiClient paymentApi)
         {
             _logger = logger;
             _paymentApi = paymentApi;
-            _publisher = publisher;
-            _sbOptions = sbOptions.Value;
         }
 
         [Function(nameof(ProcessarComprasFunction))]
@@ -41,86 +33,57 @@ namespace Fiap.FCG.Payment.Functions.Functions
             );
 
             CompraRealizadaEvent compra;
+
             try
             {
                 compra = JsonSerializer.Deserialize<CompraRealizadaEvent>(
                     message,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                ) ?? throw new InvalidOperationException("Evento de compra veio nulo após deserialize.");
+                ) ?? throw new InvalidOperationException("Evento de compra veio nulo.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Falha ao desserializar CompraRealizadaEvent. Mensagem será reprocessada ou enviada para DLQ."
-                );
-                throw; // força retry / DLQ
+                _logger.LogError(ex, "Erro ao desserializar CompraRealizadaEvent.");
+                throw;
             }
 
-            if (compra.Itens.Count == 0)
-            {
-                _logger.LogWarning(
-                    "Compra sem itens. Ignorando. UsuarioId: {UsuarioId}",
-                    compra.UsuarioId
-                );
-                return;
-            }
+            _logger.LogInformation(
+                "Processando pagamento da compra. CompraId={CompraId}, UsuarioId={UsuarioId}, ValorTotal={ValorTotal}",
+                compra.CompraId,
+                compra.UsuarioId,
+                compra.ValorTotal
+            );
 
-            foreach (var item in compra.Itens)
-            {
-                _logger.LogInformation(
-                    "Processando pagamento. UsuarioId={UsuarioId}, JogoId={JogoId}, Valor={Valor}",
-                    compra.UsuarioId,
-                    item.JogoId,
-                    item.Valor
-                );
-
-                var pagamentoResp = await _paymentApi.CriarPagamentoAsync(
-                    new CriarPagamentoRequest
-                    {
-                        UsuarioId = compra.UsuarioId,
-                        JogoId = item.JogoId,
-                        Valor = item.Valor
-                    },
-                    ct
-                );
-
-                if (!pagamentoResp.Sucesso || pagamentoResp.Valor  <= 0)
+            var pagamentoResp = await _paymentApi.CriarPagamentoAsync(
+                new CriarPagamentoRequest
                 {
-                    _logger.LogError(
-                        "Payment API retornou falha. UsuarioId={UsuarioId}, JogoId={JogoId}, Msg={Msg}",
-                        compra.UsuarioId,
-                        item.JogoId,
-                        pagamentoResp.Mensagem
-                    );
-
-                    throw new InvalidOperationException(
-                        $"Falha ao criar pagamento: {pagamentoResp.Mensagem}"
-                    );
-                }
-
-                var evt = new PagamentoCriadoEvent
-                {
-                    PagamentoId = pagamentoResp.Valor,
+                    CompraId = compra.CompraId,
                     UsuarioId = compra.UsuarioId,
-                    JogoId = item.JogoId,
-                    Valor = item.Valor,
-                    Status = pagamentoResp.Status ?? "Pendente",
-                    CriadoEm = DateTime.UtcNow
-                };
+                    ValorTotal = compra.ValorTotal,
+                    MetodoPagamento = compra.MetodoPagamento,
+                    BandeiraCartao = compra.BandeiraCartao
+                },
+                ct
+            );
 
-                await _publisher.PublishAsync(
-                    _sbOptions.PagamentosQueueName,
-                    evt,
-                    ct
+            if (!pagamentoResp.Sucesso)
+            {
+                _logger.LogError(
+                    "Falha ao criar pagamento. CompraId={CompraId}, Msg={Msg}",
+                    compra.CompraId,
+                    pagamentoResp.Mensagem
                 );
-
-                _logger.LogInformation(
-                    "Pagamento publicado em {Queue}. PagamentoId={PagamentoId}",
-                    _sbOptions.PagamentosQueueName,
-                    evt.PagamentoId
+                
+                throw new InvalidOperationException(
+                    pagamentoResp.Mensagem ?? "Erro desconhecido ao criar pagamento."
                 );
             }
+
+            _logger.LogInformation(
+                "Pagamento criado com sucesso. PagamentoId={PagamentoId}, Status={Status}",
+                pagamentoResp.PagamentoId,
+                pagamentoResp.Status
+            );
         }
     }
 }

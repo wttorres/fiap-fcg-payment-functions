@@ -2,14 +2,11 @@
 {
     public class CompraRealizadaEvent
     {
+        public int CompraId { get; set; }
         public int UsuarioId { get; set; }
+        public decimal ValorTotal { get; set; }
+        public EMetodoPagamento MetodoPagamento { get; set; }
+        public EBandeiraCartao? BandeiraCartao { get; set; }
         public DateTime DataCompra { get; set; }
-        public List<CompraRealizadaItemEvent> Itens { get; set; } = new();
-    }
-
-    public class CompraRealizadaItemEvent
-    {
-        public int JogoId { get; set; }
-        public decimal Valor { get; set; }
     }
 }
